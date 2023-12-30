@@ -1,6 +1,5 @@
 import cors from "cors";
 import express from "express";
-import jwt from "jsonwebtoken";
 import bodyParser from "body-parser";
 import dotenv from 'dotenv';
 import {router} from './routes.js'
