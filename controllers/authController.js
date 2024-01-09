@@ -1,33 +1,17 @@
-// controllers/authController.js
-
-import jwt from 'jsonwebtoken';
-import { getUserData } from '../services/dbquery.js';
-
-let refreshTokens = [];
+import jwt from "jsonwebtoken";
+import { getUserData } from "../services/dbquery.js";
 
 export const login = async (req, res) => {
   try {
-    const { username, password } = req.body;
+    const { usernameOrEmail, password } = req.body;
 
-    if (!username || !password) {
-      return res.status(400).json({ error: 'Kullanıcı adı ve şifre zorunludur' });
-    }
-
-    const userData = await getUserData(username, password);
-
-    if (!userData || !areUserDataEqual(userData, username, password)) {
-      return res.status(401).json({ error: 'Geçersiz kullanıcı adı veya şifre' });
-    }
+    const userData = await getUserData(usernameOrEmail, password);
 
     const user = { name: userData.userName, isAdmin: userData.isAdmin };
     const accessToken = generateAccessToken(user);
     const refreshToken = jwt.sign(user, process.env.REFRESH_TOKEN_SECRET);
 
-    // Log the generated access token
-/*     console.log('Generated Access Token:', accessToken); */
-
-    // Store the refresh token in the global array
-    refreshTokens.push(refreshToken);
+    /*     client.set(refreshToken, "valid"); */
 
     res.json({
       user: {
@@ -37,57 +21,98 @@ export const login = async (req, res) => {
       accessToken,
       refreshToken,
     });
-
   } catch (error) {
-    console.error('Giriş hatası:', error);
-    res.status(500).json({ error: 'İç sunucu hatası' });
+    console.error("Giriş hatası:", error);
+    res.status(500).json({ error: "İç sunucu hatası" });
   }
 };
-
-
 
 export const logout = async (req, res) => {
   try {
     const token = req.headers.authorization;
 
-    if (!token) {
-      return res.status(400).json({ error: 'Token is required for logout' });
-    }
+    if (!token)
+      return res.status(400).json({ error: "Token is required for logout" });
 
     const isValidToken = verifyToken(token);
 
     if (!isValidToken) {
-      return res.status(401).json({ error: 'Invalid token provided for logout' });
+      return res
+        .status(401)
+        .json({ error: "Invalid token provided for logout" });
     }
-
-    // Remove the token from the global array
-    refreshTokens = refreshTokens.filter((storedToken) => storedToken !== token);
-
-    // Log the removed access token
-/*     console.log('Removed Access Token:', token); */
+    /* 
+    client.del(token); */
 
     res.sendStatus(204);
-
   } catch (error) {
     res.status(500).json({ error });
   }
 };
-  
-  function areUserDataEqual(userData, username, password) {
-    return userData.userName === username && userData.password === password;
+
+export const token = async (req, res) => {
+  try {
+    const refreshToken = req.body.token;
+
+    if (!refreshToken) return sendErrorResponse(res, 403, "Token is required");
+
+    // Redis'te refresh token'ı kontrol et
+    client.exists(refreshToken, async (err, reply) => {
+      if (err || !reply) {
+        return sendErrorResponse(res, 403, "Invalid refresh token");
+      }
+
+      jwt.verify(
+        refreshToken,
+        process.env.REFRESH_TOKEN_SECRET,
+        (err, user) => {
+          if (err)
+            return sendErrorResponse(res, 403, "Token verification failed");
+
+          const accessToken = generateAccessToken({ name: user.name });
+          res.json({ accessToken });
+        }
+      );
+    });
+  } catch (error) {
+    sendErrorResponse(res, 500, error.message || "Internal server error");
   }
-  
-  const generateAccessToken = (user) => {
-    return jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '20s' });
-  };
-  
-  function verifyToken(token) {
-    try {
-     
-      const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
-      return decoded;
-    } catch (error) {
-      // If verification fails, return false
-      return false;
+};
+export const getKeys = async () => {
+  client.keys("*", (err, keys) => {
+    if (err) {
+      console.error("Error getting keys from Redis:", err);
+      return;
     }
+
+    keys.forEach((key) => {
+      // Her bir key için Redis'ten değeri al ve consol log'a yazdır
+      client.get(key, (err, value) => {
+        if (err) {
+          console.error(`Error getting value for key ${key} from Redis:`, err);
+          return;
+        }
+
+        console.log(`Key: ${key}, Value: ${value}`);
+      });
+    });
+  });
+};
+
+function areUserDataEqual(userData, username, password) {
+  return userData.userName === username && userData.password === password;
+}
+
+const generateAccessToken = (user) => {
+  return jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: "20s" });
+};
+
+function verifyToken(token) {
+  try {
+    const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
+    return decoded;
+  } catch (error) {
+    // If verification fails, return false
+    return false;
   }
+}
