@@ -7,9 +7,9 @@ let refreshTokens = [];
 
 export const login = async (req, res) => {
   try {
-    const { username, password } = req.body;
+    const { usernameOrEmail, password } = req.body;
 
-    if (!username || !password) {
+    if (!usernameOrEmail || !password) {
       return res.status(400).json({ error: 'Kullanıcı adı ve şifre zorunludur' });
     }
 
