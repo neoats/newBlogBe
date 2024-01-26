@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import { getUserData } from "../services/dbquery.js";
+import client from "../services/redis.js";
 
 export const login = async (req, res) => {
   try {
@@ -8,7 +9,7 @@ export const login = async (req, res) => {
     const userData = await getUserData(usernameOrEmail);
 
     const user = {
-      name: userData.userName,
+      username: userData.userName,
       pwd: userData.password,
       isAdmin: userData.isAdmin,
     };
@@ -19,21 +20,67 @@ export const login = async (req, res) => {
     const accessToken = generateAccessToken(user);
     const refreshToken = jwt.sign(user, process.env.REFRESH_TOKEN_SECRET);
 
-    /*     client.set(refreshToken, "valid"); */
     res.cookie("refreshToken", refreshToken, { httpOnly: true });
     res.json({
       user: {
-        name: user.name,
+        name: user.username,
         isAdmin: user.isAdmin,
       },
       accessToken,
       refreshToken,
     });
+    set(user.username, refreshToken);
+    /*     set(refreshToken); */
   } catch (error) {
     console.error("Giriş hatası:", error);
     res.status(500).json({ error: "İç sunucu hatası" });
   }
 };
+
+/* async function set(token) {
+  try {
+    await client.set(token, { ex: 100, nx: true });
+  } catch (error) {
+    console.log(error);
+  }
+} */
+
+async function set(token, username) {
+  try {
+    await client.set(token, username, { ex: 100, nx: true });
+  } catch (error) {
+    console.log(error);
+  }
+}
+
+/* async function set(username, token) {
+  try {
+    // Redis hash tipinde saklama
+    await client.hset("tokens", username, token);
+    // Opsiyonel: TTL (Geçerlilik Süresi) Ayarlama
+    await client.expire("tokens", 100);
+  } catch (error) {
+    console.error(error);
+  }
+}
+ */
+function setRedisValueAsync(key, value) {
+  return new Promise((resolve, reject) => {
+    client.set(key, value, (err) => {
+      if (err) {
+        console.error(`Error setting value for key ${key} in Redis:`, err);
+        reject(err);
+      } else {
+        resolve();
+      }
+    });
+  });
+}
+async function exampleCommands() {
+  try {
+    await kv.set("setExample", "123abc", { ex: 100, nx: true });
+  } catch (error) {}
+}
 
 export const logout = async (req, res) => {
   try {
@@ -49,8 +96,6 @@ export const logout = async (req, res) => {
         .status(401)
         .json({ error: "Invalid token provided for logout" });
     }
-    /* 
-    client.del(token); */
 
     res.sendStatus(204);
   } catch (error) {
@@ -64,49 +109,38 @@ export const token = async (req, res) => {
 
     if (!refreshToken) return sendErrorResponse(res, 403, "Token is required");
 
-    // Redis'te refresh token'ı kontrol et
-    client.exists(refreshToken, async (err, reply) => {
-      if (err || !reply) {
-        return sendErrorResponse(res, 403, "Invalid refresh token");
-      }
+    jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET, (err, user) => {
+      if (err) return sendErrorResponse(res, 403, "Token verification failed");
 
-      jwt.verify(
-        refreshToken,
-        process.env.REFRESH_TOKEN_SECRET,
-        (err, user) => {
-          if (err)
-            return sendErrorResponse(res, 403, "Token verification failed");
-
-          const accessToken = generateAccessToken({ name: user.name });
-          res.json({ accessToken });
-        }
-      );
+      const accessToken = generateAccessToken({ name: user.name });
+      res.json({ accessToken });
     });
   } catch (error) {
     sendErrorResponse(res, 500, error.message || "Internal server error");
   }
 };
-export const getKeys = async () => {
-  client.keys("*", (err, keys) => {
-    if (err) {
-      console.error("Error getting keys from Redis:", err);
-      return;
-    }
-
-    keys.forEach((key) => {
-      // Her bir key için Redis'ten değeri al ve consol log'a yazdır
-      client.get(key, (err, value) => {
-        if (err) {
-          console.error(`Error getting value for key ${key} from Redis:`, err);
-          return;
-        }
-
-        console.log(`Key: ${key}, Value: ${value}`);
-      });
+export const getKeys = async (req, res) => {
+  try {
+    const keys = await client.keys("*");
+    /*     const keys = await client.get("*"); */
+    return res.json({
+      keys,
     });
-  });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Internal server error" });
+  }
 };
 
+/* export async function getKeys() {
+  try {
+    const token = await client.hgetall("*");
+    return token;
+  } catch (error) {
+    console.error(error);
+  }
+}
+ */
 function areUserDataEqual(userData, username, password) {
   return userData.userName === username && userData.password === password;
 }

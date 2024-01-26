@@ -22,7 +22,7 @@ export const getUserData = async (usernameOrEmail) => {
   const query = `
     query GetUser {
       accounts(where: { OR: [{ email: "${fieldValue}" }, { userName: "${fieldValue}" }]}) {
-        name
+        userName
         isAdmin
         password
       }

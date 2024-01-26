@@ -4,17 +4,14 @@ import bodyParser from "body-parser";
 import dotenv from "dotenv";
 import { router } from "./routes.js";
 import cookieParser from "cookie-parser";
-import { createClient } from "redis";
-/* 
- const client = createClient();
-
-client.on("connect", () => {
-  console.log("Connected to Redis");
-}); */
 
 const app = express();
 
 // Middleware
+
+const redisHost = "localhost";
+const redisPort = 6379;
+
 app.use(cookieParser());
 app.use(bodyParser.json());
 app.use(cors({ credentials: true, origin: "*" }));
