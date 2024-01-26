@@ -1,0 +1,30 @@
+name: Pre-Prod to Prod Deployment
+
+on:
+  push:
+    branches:
+      - pre-prod
+
+jobs:
+  deploy_to_prod:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Deploy to Prod
+      run: |
+        # Buraya pre-prod'daki deploy işlemlerini ekleyin
+        # Örneğin:
+        # ./deploy-script.sh pre-prod
+        # Bu komut, pre-prod ortamınızı hazırlayabilir
+
+    - name: Push to Prod
+      if: success()
+      run: |
+        git config user.name "${{ github.actor }}"
+        git config user.email "${{ github.actor }}@users.noreply.github.com"
+        git checkout prod
+        git merge --no-ff "${{ github.sha }}" -m "Merge pre-production changes"
+        git push origin prod
